@@ -14,6 +14,6 @@ COPY --from=builder /out/walkietalkie .
 COPY templates/ ./templates/
 COPY static/ ./static/
 COPY config.yaml .
-EXPOSE 8080
+EXPOSE 8083
 VOLUME ["/app/data"]
 CMD ["./walkietalkie"]

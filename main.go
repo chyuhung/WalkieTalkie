@@ -108,7 +108,7 @@ func main() {
 
 	port := viper.GetString("server.port")
 	if port == "" {
-		port = "8080"
+		port = "8083"
 	}
 	log.Printf("对讲机服务已启动: http://localhost:%s", port)
 	if err := r.Run(":" + port); err != nil {

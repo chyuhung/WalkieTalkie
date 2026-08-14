@@ -1,5 +1,5 @@
 server:
-  port: "8080"
+  port: "8083"
   # 生产环境建议通过反向代理提供 HTTPS（详见 README）
   # 前端是否强制走 https/wss 判断，留空则按页面协议自适应
   ws_scheme: ""

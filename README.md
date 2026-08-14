@@ -26,14 +26,14 @@
 go mod tidy
 go build -o walkietalkie.exe .
 .\walkietalkie.exe
-# 浏览器访问 http://localhost:8080
+# 浏览器访问 http://localhost:8083
 ```
 
 ### 方式二：Docker
 
 ```bash
 docker compose up -d --build
-# 访问 http://<服务器IP>:8080
+# 访问 http://<服务器IP>:8083
 ```
 
 ### 方式三：HTTPS 部署（手机对讲必需）
@@ -44,10 +44,10 @@ docker compose up -d --build
 
 1. 准备一个域名，解析到服务器
 2. 修改 `Caddyfile` 中的域名
-3. 启动 Caddy 反向代理到 8080 端口
+3. 启动 Caddy 反向代理到 8083 端口
 
 > 自测时可选 Chrome 实验参数：
-> `chrome --unsafely-treat-insecure-origin-as-secure="http://192.168.x.x:8080"`
+> `chrome --unsafely-treat-insecure-origin-as-secure="http://192.168.x.x:8083"`
 
 ## 使用说明
 
@@ -62,7 +62,7 @@ docker compose up -d --build
 
 ```yaml
 server:
-  port: "8080"          # 监听端口
+  port: "8083"          # 监听端口
 
 webrtc:
   ice_servers: '[...]'  # ICE 服务器；跨网络对讲需配置 TURN 服务器
