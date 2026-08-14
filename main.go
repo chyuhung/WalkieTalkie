@@ -60,6 +60,10 @@ func main() {
 	r := gin.Default()
 	r.Use(middleware.ErrorHandler())
 
+	r.GET("/api/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
 	r.Use(sessions.Sessions("wt_session", cookie.NewStore([]byte(secret))))
 
 	auth := middleware.AuthMiddleware(db)

@@ -1,6 +1,9 @@
 services:
   walkietalkie:
-    build: .
+    build:
+      context: .
+      args:
+        GOPROXY: https://goproxy.cn,https://goproxy.io,direct
     container_name: walkietalkie
     restart: unless-stopped
     ports:
@@ -9,3 +12,9 @@ services:
       - ./data:/app/data
     environment:
       - TZ=Asia/Shanghai
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8083/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

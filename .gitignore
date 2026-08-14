@@ -1,6 +1,6 @@
 # 构建产物
 WalkieTalkie.exe
-*.exe
+*.exe*
 
 # 数据目录（数据库、上传的音频）
 data/
