@@ -66,7 +66,14 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	r.Use(sessions.Sessions("wt_session", cookie.NewStore([]byte(secret))))
+	store := cookie.NewStore([]byte(secret))
+	store.Options(sessions.Options{
+		MaxAge:   0,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	r.Use(sessions.Sessions("wt_session", store))
 
 	auth := middleware.AuthMiddleware(db)
 
