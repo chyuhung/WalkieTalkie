@@ -127,6 +127,14 @@ html, body {
 
 .room-list { margin-top: 8px; }
 
+.section-title {
+  margin-top: 18px;
+  padding: 0 2px;
+  font-size: 13px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
 .room-item {
   display: flex;
   align-items: center;

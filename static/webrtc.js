@@ -38,7 +38,7 @@ window.PTT = (function () {
   function createPeer(remoteId) {
     if (peers[remoteId]) { return peers[remoteId].pc; }
     var pc = new RTCPeerConnection(iceConfig);
-    var entry = { pc: pc, senderTrack: null, audioEl: null };
+    var entry = { pc: pc, senderTracks: [], audioEl: null, attached: false };
     peers[remoteId] = entry;
 
     pc.onicecandidate = function (ev) {
@@ -57,10 +57,11 @@ window.PTT = (function () {
 
   function attachTracks(remoteId) {
     var entry = peers[remoteId];
-    if (!entry || !localStream) { return; }
+    if (!entry || !localStream || entry.attached) { return; }
     localStream.getAudioTracks().forEach(function (track) {
-      entry.senderTrack = entry.pc.addTrack(track, localStream);
+      entry.senderTracks.push(entry.pc.addTrack(track, localStream));
     });
+    entry.attached = true;
   }
 
   function ensureAudioEl(remoteId, stream) {
@@ -95,6 +96,17 @@ window.PTT = (function () {
     }).catch(function (e) { console.error('offer 失败', e); });
   }
 
+  // 已建立连接后再挂入音轨需重新协商
+  function negotiate(remoteId) {
+    var entry = peers[remoteId];
+    if (!entry) { return Promise.resolve(); }
+    return entry.pc.createOffer().then(function (offer) {
+      return entry.pc.setLocalDescription(offer);
+    }).then(function () {
+      send({ type: 'webrtc_offer', to: remoteId, data: { sdp: entry.pc.localDescription } });
+    }).catch(function (e) { console.error('renegotiate 失败', e); });
+  }
+
   function handleOffer(from, data) {
     var pc = createPeer(from);
     return pc.setRemoteDescription(new RTCSessionDescription(data.sdp))
@@ -124,10 +136,13 @@ window.PTT = (function () {
   function talkStart() {
     return ensureMic().then(function () {
       unlockAudio();
-      // 确保所有 peer 都挂上了音轨
+      // 确保所有 peer 都挂上了音轨；新挂上的需要重新协商
       Object.keys(peers).forEach(function (id) {
         var entry = peers[id];
-        if (!entry.senderTrack) { attachTracks(id); }
+        if (!entry.attached) {
+          attachTracks(id);
+          negotiate(id);
+        }
       });
       if (localStream) {
         localStream.getAudioTracks().forEach(function (t) { t.enabled = true; });
@@ -172,6 +187,7 @@ window.PTT = (function () {
     setIce: setIce,
     setStateCallback: setStateCallback,
     initiate: initiate,
+    negotiate: negotiate,
     handleOffer: handleOffer,
     handleAnswer: handleAnswer,
     handleIce: handleIce,

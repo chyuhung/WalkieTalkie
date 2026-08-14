@@ -12,6 +12,7 @@
     room: null,          // {id, name}
     ws: null,
     wsReady: false,
+    joining: false,        // 是否刚发送 join 等待首个 presence（用于发起 WebRTC offer）
     members: [],         // [{id, username}]
     speaking: {},        // userId -> true/false
     loadingOlder: false,
@@ -53,10 +54,14 @@
 
     ws.onopen = function () {
       state.wsReady = true;
-      if (state.room) { sendWS({ type: 'join', room: state.room.id }); }
+      if (state.room) {
+        state.joining = true;
+        sendWS({ type: 'join', room: state.room.id });
+      }
     };
     ws.onclose = function () {
       state.wsReady = false;
+      window.PTT.closeAll();
       setTimeout(function () { if (!state.me) { return; } connectWS(); }, 2000);
     };
     ws.onerror = function () { ws.close(); };
@@ -83,9 +88,15 @@
         state.members = d || [];
         state.speaking = {};
         renderMembers();
+        // 刚加入者向房间内其他成员发起 WebRTC offer（mesh 建连）
+        if (state.joining) {
+          state.joining = false;
+          state.members.forEach(function (m) {
+            if (m.id !== state.me.id) { window.PTT.initiate(m.id); }
+          });
+        }
         break;
       case 'user_joined':
-        // 新成员加入，由我（作为已在线者）等待对方 offer 即可，无需主动 offer
         appendSys(msg.data.username + ' 加入了房间');
         break;
       case 'user_left':
@@ -144,6 +155,27 @@
     }).catch(function (err) {
       listEl.innerHTML = '<div class="empty">加载失败：' + esc(err.message) + '</div>';
     });
+
+    // 全部房间（可加入任意房间）
+    var allEl = $('all-rooms');
+    api('/api/rooms/all').then(function (data) {
+      var rooms = data.rooms || [];
+      if (!rooms.length) {
+        allEl.innerHTML = '<div class="empty">暂无房间</div>';
+        return;
+      }
+      allEl.innerHTML = rooms.map(function (r) {
+        return '<div class="room-item" data-id="' + r.id + '">' +
+          '<div><div class="name">' + esc(r.name) + '</div>' +
+          '<div class="meta">ID: ' + r.id + ' · 成员 ' + r.member_count + '</div></div>' +
+          '<div class="go">加入 ›</div></div>';
+      }).join('');
+      allEl.querySelectorAll('.room-item').forEach(function (el) {
+        el.addEventListener('click', function () { enterRoom(parseInt(el.dataset.id, 10)); });
+      });
+    }).catch(function (err) {
+      allEl.innerHTML = '<div class="empty">加载失败：' + esc(err.message) + '</div>';
+    });
   }
 
   function createRoom() {
@@ -183,8 +215,11 @@
       $('messages').innerHTML = '';
       renderMembers();
       loadMessages();
-      if (state.wsReady) { sendWS({ type: 'join', room: r.id }); }
-      else { connectWS(); }
+      $('btn-ptt').disabled = false;
+      if (state.wsReady) {
+        state.joining = true;
+        sendWS({ type: 'join', room: r.id });
+      } else { connectWS(); }
     }).catch(function (err) { alert(err.message); });
   }
 
@@ -192,9 +227,11 @@
     if (state.wsReady && state.room) { sendWS({ type: 'leave', room: state.room.id }); }
     window.PTT.closeAll();
     state.room = null;
+    state.joining = false;
     $('messages').innerHTML = '';
     $('view-room').classList.add('hidden');
     $('view-lobby').classList.remove('hidden');
+    $('btn-ptt').disabled = true;
     loadRooms();
   }
 
@@ -364,7 +401,11 @@
       window.PTT.talkStart().catch(function () {
         state.pttHolding = false;
         btn.classList.remove('holding');
-        alert('无法使用麦克风，请检查权限与 HTTPS 环境');
+        if (!window.isSecureContext) {
+          alert('当前为 HTTP 访问，手机浏览器不允许使用麦克风。\n请通过 HTTPS 访问（如配置域名 + Caddy），详见 README。');
+        } else {
+          alert('无法使用麦克风，请检查浏览器权限设置（允许麦克风）。');
+        }
       });
     }
     function release() {
