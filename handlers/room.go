@@ -83,6 +83,59 @@ func JoinRoom(db *sql.DB, registerRoom func(id int64, name string) interface{}) 
 	}
 }
 
+// LeaveRoom 退出房间（移除成员关系）
+func LeaveRoom(db *sql.DB, forceLeave func(userID int64)) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		roomID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "房间 ID 无效"})
+			return
+		}
+		userID := c.GetInt64("user_id")
+		res, err := db.Exec("DELETE FROM room_members WHERE room_id = ? AND user_id = ?", roomID, userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "退出失败"})
+			return
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "你尚未加入该房间"})
+			return
+		}
+		forceLeave(userID)
+		// 房主退出且房间无人时，允许后续清理由删除操作完成
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	}
+}
+
+// DeleteRoom 房主删除房间（级联删除成员与消息）
+func DeleteRoom(db *sql.DB, uploadDir string, deleteRoom func(roomID int64)) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		roomID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "房间 ID 无效"})
+			return
+		}
+		var ownerID int64
+		err = db.QueryRow("SELECT owner_id FROM rooms WHERE id = ?", roomID).Scan(&ownerID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "房间不存在"})
+			return
+		}
+		if ownerID != c.GetInt64("user_id") {
+			c.JSON(http.StatusForbidden, gin.H{"error": "只有房主才能删除房间"})
+			return
+		}
+		// 真删除，messages/room_members 由外键级联删除
+		if _, err := db.Exec("DELETE FROM rooms WHERE id = ?", roomID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败"})
+			return
+		}
+		deleteRoom(roomID)
+		cleanupRoomAudio(db, uploadDir, roomID)
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	}
+}
+
 // ListAllRooms 列出所有可加入的房间
 func ListAllRooms(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {

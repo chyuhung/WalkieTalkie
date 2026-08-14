@@ -185,6 +185,57 @@ func (h *Hub) Speaking(roomID, userID int64, talking bool) {
 	})
 }
 
+// ForceLeave 强制某用户离开当前房间（用于退出/删除房间时同步在线状态）
+func (h *Hub) ForceLeave(userID int64) {
+	h.mu.RLock()
+	var target *Client
+	for _, r := range h.rooms {
+		r.mu.RLock()
+		for _, c := range r.clients {
+			if c.ID == userID {
+				target = c
+				break
+			}
+		}
+		r.mu.RUnlock()
+		if target != nil {
+			break
+		}
+	}
+	h.mu.RUnlock()
+	if target != nil {
+		h.Leave(target)
+	}
+}
+
+// DeleteRoom 删除房间并从 hub 移除，通知所有在线成员
+func (h *Hub) DeleteRoom(roomID int64) {
+	var room *Room
+	h.mu.Lock()
+	room = h.rooms[roomID]
+	delete(h.rooms, roomID)
+	h.mu.Unlock()
+	if room == nil {
+		return
+	}
+	room.broadcast(map[string]interface{}{
+		"type":    "room_deleted",
+		"data":    map[string]interface{}{"id": roomID},
+	}, nil)
+
+	room.mu.Lock()
+	clients := make([]*Client, 0, len(room.clients))
+	for _, c := range room.clients {
+		clients = append(clients, c)
+	}
+	room.clients = make(map[int64]*Client)
+	room.mu.Unlock()
+
+	for _, c := range clients {
+		c.Room = 0
+	}
+}
+
 // Shutdown 关闭所有客户端连接
 func (h *Hub) Shutdown() {
 	h.mu.RLock()

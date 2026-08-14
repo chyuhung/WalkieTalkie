@@ -2,9 +2,12 @@ package handlers
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"mime/multipart"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -34,4 +37,23 @@ func randName(n int) string {
 	b := make([]byte, n)
 	rand.Read(b)
 	return hex.EncodeToString(b)[:n*2]
+}
+
+// cleanupRoomAudio 删除房间删除后遗留的语音文件
+func cleanupRoomAudio(db *sql.DB, uploadDir string, roomID int64) {
+	rows, err := db.Query("SELECT audio_url FROM messages WHERE room_id = ? AND msg_type = 'voice' AND audio_url != ''", roomID)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var url string
+		rows.Scan(&url)
+		// /audio/xxx.ext -> dir/xxx.ext
+		name := strings.TrimPrefix(url, "/audio/")
+		if name == url {
+			continue
+		}
+		os.Remove(filepath.Join(uploadDir, filepath.Base(name)))
+	}
 }

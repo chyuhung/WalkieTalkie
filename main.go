@@ -100,12 +100,19 @@ func main() {
 
 	api := r.Group("/api")
 	api.Use(auth)
+	// 将上传目录注入上下文（语音上传与删除清理使用）
+	api.Use(func(c *gin.Context) {
+		c.Set("upload_dir", uploadDir)
+		c.Next()
+	})
 	{
 		// 房间
 		api.POST("/rooms", handlers.CreateRoom(db, registerRoomFunc(hubInstance)))
 		api.GET("/rooms", handlers.GetRooms(db))
 		api.GET("/rooms/all", handlers.ListAllRooms(db))
 		api.POST("/rooms/:id/join", handlers.JoinRoom(db, registerRoomFunc(hubInstance)))
+		api.POST("/rooms/:id/leave", handlers.LeaveRoom(db, hubInstance.ForceLeave))
+		api.DELETE("/rooms/:id", handlers.DeleteRoom(db, uploadDir, hubInstance.DeleteRoom))
 		// 消息
 		api.POST("/messages", handlers.SendTextMessage(db, hubInstance.Broadcast))
 		api.POST("/messages/voice", handlers.UploadVoice(db, hubInstance.Broadcast, 5*1024*1024))

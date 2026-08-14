@@ -131,6 +131,14 @@
       case 'server_close':
         window.location.href = '/login';
         break;
+      case 'room_deleted':
+        if (state.room && msg.data && msg.data.id === state.room.id) {
+          alert('房间已被房主删除');
+          leaveRoom();
+        } else {
+          loadRooms();
+        }
+        break;
     }
   }
 
@@ -144,14 +152,22 @@
         return;
       }
       listEl.innerHTML = rooms.map(function (r) {
+        var isOwner = r.owner_id === state.me.id;
         return '<div class="room-item" data-id="' + r.id + '">' +
-          '<div><div class="name">' + esc(r.name) + '</div>' +
+          '<div class="room-main"><div class="name">' + esc(r.name) + '</div>' +
           '<div class="meta">ID: ' + r.id + ' · 成员 ' + r.member_count + '</div></div>' +
-          '<div class="go">›</div></div>';
+          '<div class="room-ops">' +
+          (isOwner ? '<button class="op-btn op-del" data-del="' + r.id + '">删除</button>' : '') +
+          '<button class="op-btn op-leave" data-leave="' + r.id + '">退出</button>' +
+          '</div></div>';
       }).join('');
       listEl.querySelectorAll('.room-item').forEach(function (el) {
-        el.addEventListener('click', function () { enterRoom(parseInt(el.dataset.id, 10)); });
+        el.addEventListener('click', function (e) {
+          if (e.target.closest('.op-btn')) { return; }
+          enterRoom(parseInt(el.dataset.id, 10));
+        });
       });
+      bindRoomOps(listEl);
     }).catch(function (err) {
       listEl.innerHTML = '<div class="empty">加载失败：' + esc(err.message) + '</div>';
     });
@@ -166,15 +182,48 @@
       }
       allEl.innerHTML = rooms.map(function (r) {
         return '<div class="room-item" data-id="' + r.id + '">' +
-          '<div><div class="name">' + esc(r.name) + '</div>' +
+          '<div class="room-main"><div class="name">' + esc(r.name) + '</div>' +
           '<div class="meta">ID: ' + r.id + ' · 成员 ' + r.member_count + '</div></div>' +
-          '<div class="go">加入 ›</div></div>';
+          '<div class="room-ops"><button class="op-btn op-join" data-join="' + r.id + '">加入</button></div></div>';
       }).join('');
       allEl.querySelectorAll('.room-item').forEach(function (el) {
-        el.addEventListener('click', function () { enterRoom(parseInt(el.dataset.id, 10)); });
+        el.addEventListener('click', function (e) {
+          if (e.target.closest('.op-btn')) { return; }
+          enterRoom(parseInt(el.dataset.id, 10));
+        });
       });
     }).catch(function (err) {
       allEl.innerHTML = '<div class="empty">加载失败：' + esc(err.message) + '</div>';
+    });
+  }
+
+  // 绑定房间操作按钮：删除 / 退出 / 加入
+  function bindRoomOps(listEl) {
+    listEl.querySelectorAll('.op-del').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var id = parseInt(btn.dataset.del, 10);
+        if (!confirm('确认删除该房间？将删除所有聊天记录与语音，且不可恢复！')) { return; }
+        api('/api/rooms/' + id, { method: 'DELETE' }).then(function () {
+          loadRooms();
+        }).catch(function (err) { alert(err.message); });
+      });
+    });
+    listEl.querySelectorAll('.op-leave').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var id = parseInt(btn.dataset.leave, 10);
+        if (!confirm('确认退出该房间？')) { return; }
+        api('/api/rooms/' + id + '/leave', { method: 'POST' }).then(function () {
+          loadRooms();
+        }).catch(function (err) { alert(err.message); });
+      });
+    });
+    listEl.querySelectorAll('.op-join').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        enterRoom(parseInt(btn.dataset.join, 10));
+      });
     });
   }
 
