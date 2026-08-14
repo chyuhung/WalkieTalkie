@@ -20,6 +20,7 @@ import (
 )
 
 func main() {
+	gin.SetMode(gin.ReleaseMode)
 	viper.SetConfigFile("config.yaml")
 	if err := viper.ReadInConfig(); err != nil {
 		log.Fatalf("读取配置文件失败: %v", err)
@@ -59,6 +60,7 @@ func main() {
 
 	r := gin.Default()
 	r.Use(middleware.ErrorHandler())
+	r.LoadHTMLGlob("templates/*")
 
 	r.GET("/api/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
