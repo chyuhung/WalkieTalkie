@@ -7,7 +7,9 @@ services:
     container_name: walkietalkie
     restart: unless-stopped
     ports:
-      - "8083:8083"
+      # 仅绑定本机回环，通过 Nginx HTTPS 反代访问（见 deploy/https/）
+      # 若仍需局域网内 http://IP:8083 直连，可改回 "8083:8083"
+      - "127.0.0.1:8083:8083"
     volumes:
       - ./data:/app/data
     environment:

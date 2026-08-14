@@ -40,13 +40,37 @@ docker compose up -d --build
 
 手机浏览器的麦克风要求「安全上下文」（HTTPS 或 localhost）。局域网通过 IP 访问时会被浏览器拦截麦克风权限。
 
+#### 有域名：Caddy 自动签发（最省事）
+
 推荐用 [Caddy](https://caddyserver.com) 自动签发证书：
 
 1. 准备一个域名，解析到服务器
 2. 修改 `Caddyfile` 中的域名
 3. 启动 Caddy 反向代理到 8083 端口
 
-> 自测时可选 Chrome 实验参数：
+#### 无域名（iOS/安卓用）：自签证书 + Nginx 反代
+
+不需要域名，直接用服务器 IP 做 HTTPS。配置文件在 `deploy/https/`：
+
+```bash
+# 1) 在服务器生成自签证书（替换成你的服务器 IP；局域网 IP 可多个）
+bash deploy/https/gen-certs.sh 8.134.203.172 192.168.1.100
+
+# 2) 安装 Nginx 并套上反代配置
+apt install -y nginx
+cp deploy/https/nginx-https.conf /etc/nginx/conf.d/walkietalkie.conf
+nginx -t && systemctl reload nginx
+```
+
+3. `docker-compose.yml` 默认已把 8083 绑到 `127.0.0.1`（仅本机可达，必须经 Nginx HTTPS）；在安全组/防火墙只开放 **443**，**关闭公网 8083**
+4. iPhone 安装并信任证书：
+   - 把 `walkielog.crt` 通过 AirDrop/邮件/网盘传到手机 → 打开 → **已下载的描述文件 → 安装**
+   - **设置 → 通用 → 关于本机 → 证书信任设置 → 开启「完全信任」**（此步不做，Safari 仍会拦麦克风）
+5. Safari 访问 `https://8.134.203.172` 即可
+
+> 注意：iOS 对被信任的证书有效期有 1 年限制，到期需重新生成并重装。
+>
+> 自测时可选 Chrome 实验参数（仅桌面端）：
 > `chrome --unsafely-treat-insecure-origin-as-secure="http://192.168.x.x:8083"`
 
 ## 使用说明
