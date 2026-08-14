@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1220">
+  <title>注册 · 网页对讲机</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="auth-body">
+  <div class="auth-card">
+    <h1>📻 网页对讲机</h1>
+    <p class="auth-sub">注册一个账号开始对讲</p>
+    <input id="reg-username" type="text" placeholder="用户名（2-20 字符）" autocomplete="username">
+    <input id="reg-password" type="password" placeholder="密码（至少 6 位）" autocomplete="new-password">
+    <input id="reg-password2" type="password" placeholder="确认密码" autocomplete="new-password">
+    <div id="reg-error" class="error hidden"></div>
+    <button id="btn-register" class="btn btn-success btn-block">注 册</button>
+    <p class="auth-link">已有账号？<a href="/login">去登录</a></p>
+  </div>
+  <script src="/static/auth.js"></script>
+</body>
+</html>

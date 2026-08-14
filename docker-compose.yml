@@ -1,0 +1,11 @@
+services:
+  walkietalkie:
+    build: .
+    container_name: walkietalkie
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - TZ=Asia/Shanghai

@@ -1,0 +1,125 @@
+# 📻 网页对讲机（Web Walkie-Talkie）
+
+手机浏览器端多人对讲系统：实时语音对讲（WebRTC P2P）、文字消息（自动朗读 TTS）、语音转文字显示（ASR）、在线状态、聊天记录。
+
+## 功能特性
+
+| 功能 | 说明 |
+|---|---|
+| 🎙️ 多人实时对讲 | 按住「说话」按钮，WebRTC 点到点直达，延迟最低（mesh 拓扑，适合 5-10 人小房间） |
+| 💬 文字消息 | 输入文字发送，自动朗读（浏览器 `SpeechSynthesis`，可开关） |
+| 📝 语音转文字 | 录制语音消息时实时转写（`SpeechRecognition`），对方可选择「听语音」或「看文字」 |
+| 🟢 在线状态 | WebSocket 心跳 + 在线成员列表，实时显示说话状态 |
+| 🕘 聊天记录 | SQLite 持久化，分页加载历史消息 |
+
+## 技术栈
+
+- **后端**：Go + Gin + gorilla/websocket + SQLite（modernc，纯 Go 无 cgo）
+- **前端**：原生 HTML/CSS/JS（移动优先），WebRTC + Web Speech API
+- **部署**：Docker / docker-compose / Caddy HTTPS
+
+## 快速开始
+
+### 方式一：直接运行（本地调试）
+
+```bash
+go mod tidy
+go build -o walkietalkie.exe .
+.\walkietalkie.exe
+# 浏览器访问 http://localhost:8080
+```
+
+### 方式二：Docker
+
+```bash
+docker compose up -d --build
+# 访问 http://<服务器IP>:8080
+```
+
+### 方式三：HTTPS 部署（手机对讲必需）
+
+手机浏览器的麦克风要求「安全上下文」（HTTPS 或 localhost）。局域网通过 IP 访问时会被浏览器拦截麦克风权限。
+
+推荐用 [Caddy](https://caddyserver.com) 自动签发证书：
+
+1. 准备一个域名，解析到服务器
+2. 修改 `Caddyfile` 中的域名
+3. 启动 Caddy 反向代理到 8080 端口
+
+> 自测时可选 Chrome 实验参数：
+> `chrome --unsafely-treat-insecure-origin-as-secure="http://192.168.x.x:8080"`
+
+## 使用说明
+
+1. **注册/登录**：创建账号，进入房间列表
+2. **加入房间**：新建房间，或输入房间 ID 直接加入
+3. **实时对讲**：按住底部红色「说话」按钮，松开即发送；说话时其他人会看到你正在说话
+4. **文字消息**：底部输入框打字回车发送；勾选「文字自动朗读」时，收到的文字会以语音播报
+5. **语音消息**：点 🎤 开始录音，松开/再次点击发送；若浏览器支持，会自动附上转写文字
+6. **在线成员**：点右上角 👥 查看在线成员与说话状态
+
+## 配置说明（config.yaml）
+
+```yaml
+server:
+  port: "8080"          # 监听端口
+
+webrtc:
+  ice_servers: '[...]'  # ICE 服务器；跨网络对讲需配置 TURN 服务器
+
+asr:
+  provider: ""          # 第三方语音转文字服务（预留）
+  api_key: ""
+  api_url: ""
+```
+
+- **局域网对讲**：默认公网 STUN 即可（手机与服务器同网段时，ICE 会自动走主机候选）
+- **跨公网对讲**：需自建 [coturn](https://github.com/coturn/coturn) 作为 TURN 服务器，填入 `ice_servers`
+- **语音转文字**：优先使用浏览器 `SpeechRecognition`（Chrome/Edge）；Safari 不支持时自动回退，转写结果为空仅显示语音气泡
+
+## 项目结构
+
+```
+WalkieTalkie/
+├── main.go              # 路由、迁移、启动
+├── config.yaml          # 配置
+├── schema.sql           # 数据库结构参考
+├── handlers/            # auth / room / message / ws / asr
+├── hub/                 # WebSocket hub：房间、信令转发、在线状态
+├── middleware/          # 认证中间件
+├── templates/           # 页面（index / login / register）
+├── static/              # 前端（app.js / webrtc.js / voice.js / style.css）
+├── Dockerfile
+├── docker-compose.yml
+└── Caddyfile            # HTTPS 反向代理示例
+```
+
+## 数据表
+
+- `users`：用户（用户名、密码哈希）
+- `rooms`：对讲房间
+- `room_members`：房间成员
+- `messages`：聊天记录（text / voice，含转写文本与音频 URL）
+
+## WebSocket 协议（客户端 ⇄ 服务器）
+
+```
+客户端 → 服务器：
+  {type:"join", room:1}                     加入房间
+  {type:"leave"}                            离开房间
+  {type:"speaking", data:{talking:true}}    对讲状态
+  {type:"webrtc_offer|webrtc_answer|webrtc_ice", to:2, data:{...}}  WebRTC 信令
+
+服务器 → 客户端：
+  {type:"presence", data:[{id,username}]}   在线成员列表
+  {type:"user_joined"|"user_left", ...}     成员进出
+  {type:"speaking", data:{id,talking}}      说话状态
+  {type:"chat"|"voice", data:{...}}         聊天/语音消息
+  {type:"webrtc_offer|webrtc_answer|webrtc_ice", from:1, data:{...}}
+```
+
+## 已知限制
+
+- 对讲采用 **mesh 拓扑**，房间成员较多（>10）时带宽压力大，可扩展为 SFU 架构
+- Web Speech API（TTS/ASR）仅 Chrome/Edge 完整支持；iOS Safari 不支持实时转写
+- 多人同时按住说话时会相互叠加，建议同一时刻由一人发言（对讲机使用习惯）

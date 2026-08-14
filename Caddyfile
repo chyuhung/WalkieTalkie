@@ -1,0 +1,11 @@
+# 使用 Caddy 为手机对讲提供 HTTPS（麦克风安全上下文必需）
+# 用法：将 walkie.example.com 换成你的域名，然后
+#   docker run -d -p 80:80 -p 443:443 \
+#     -v $PWD/Caddyfile:/etc/caddy/Caddyfile \
+#     -v caddy_data:/data \
+#     --network host \
+#     caddy:2
+
+walkie.example.com {
+    reverse_proxy 127.0.0.1:8080
+}

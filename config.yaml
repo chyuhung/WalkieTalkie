@@ -1,0 +1,26 @@
+server:
+  port: "8080"
+  # 生产环境建议通过反向代理提供 HTTPS（详见 README）
+  # 前端是否强制走 https/wss 判断，留空则按页面协议自适应
+  ws_scheme: ""
+
+database:
+  path: "./data/walkie_talkie.sqlite"
+
+upload:
+  dir: "./data/audio"
+
+session:
+  secret: "change-me-to-a-long-random-string"
+
+webrtc:
+  # ICE 服务器列表（JSON 数组字符串，逗号分隔多个 STUN/TURN）
+  # 局域网对讲通常公网 STUN 即可；跨网络需自建 TURN
+  ice_servers: '[{"urls":["stun:stun.l.google.com:19302","stun:stun.cloudflare.com:3478"]}]'
+
+asr:
+  # 预留第三方语音转文字接口（如 OpenAI Whisper、火山引擎等）
+  # 留空时仅使用浏览器端 Web Speech API
+  provider: ""
+  api_key: ""
+  api_url: ""

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1220">
+  <title>登录 · 网页对讲机</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="auth-body">
+  <div class="auth-card">
+    <h1>📻 网页对讲机</h1>
+    <p class="auth-sub">多人实时对讲 · 文字消息 · 语音转文字</p>
+    <input id="login-username" type="text" placeholder="用户名" autocomplete="username">
+    <input id="login-password" type="password" placeholder="密码" autocomplete="current-password">
+    <div id="login-error" class="error hidden"></div>
+    <button id="btn-login" class="btn btn-primary btn-block">登 录</button>
+    <p class="auth-link">还没有账号？<a href="/register">去注册</a></p>
+  </div>
+  <script src="/static/auth.js"></script>
+</body>
+</html>
