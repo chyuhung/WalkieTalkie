@@ -88,6 +88,8 @@
       case 'presence':
         state.members = d || [];
         state.speaking = {};
+        // 成员列表刷新，清理可能残留的"正在说话"提示条
+        $('messages').querySelectorAll('.sys-msg[data-speak-id]').forEach(function (el) { el.remove(); });
         renderMembers();
         // 刚加入者向房间内其他成员发起 WebRTC offer（mesh 建连）
         if (state.joining) {
@@ -109,9 +111,14 @@
       case 'speaking':
         state.speaking[msg.data.id] = !!msg.data.talking;
         renderMembers();
-        if (msg.data.id !== state.me.id && msg.data.talking) {
-          var spk = state.members.find(function (m) { return m.id === msg.data.id; });
-          appendSys((spk ? spk.username : '成员 ' + msg.data.id) + ' 正在说话…', true);
+        if (msg.data.id !== state.me.id) {
+          if (msg.data.talking) {
+            removeSpeaking(msg.data.id);
+            var spk = state.members.find(function (m) { return m.id === msg.data.id; });
+            appendSys((spk ? spk.username : '成员 ' + msg.data.id) + ' 正在说话…', true, msg.data.id);
+          } else {
+            removeSpeaking(msg.data.id);
+          }
         }
         break;
       case 'chat':
@@ -328,12 +335,20 @@
     }
   }
 
-  function appendSys(text, highlight) {
+  function appendSys(text, highlight, speakId) {
     var div = document.createElement('div');
     div.className = 'sys-msg' + (highlight ? ' speaking' : '');
+    if (speakId) { div.setAttribute('data-speak-id', speakId); }
     div.textContent = text;
     $('messages').appendChild(div);
     $('messages').scrollTop = $('messages').scrollHeight;
+  }
+
+  // 移除指定用户的"正在说话"提示条
+  function removeSpeaking(id) {
+    $('messages').querySelectorAll('.sys-msg[data-speak-id="' + id + '"]').forEach(function (el) {
+      el.remove();
+    });
   }
 
   /* ---------------- 消息渲染 ---------------- */
