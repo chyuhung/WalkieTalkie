@@ -107,6 +107,14 @@ html, body {
 .btn-danger { background: var(--danger); color: #fff; }
 .btn-block { width: 100%; padding: 13px; font-size: 16px; }
 
+/* ---------- iOS 长按不弹系统菜单（复制/选择等，避免与长按说话/录音冲突） ---------- */
+.ptt-btn, .btn, .icon-btn, .voice-btn {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+}
+
 /* ---------- 大厅 ---------- */
 .lobby-content { padding: 16px; overflow-y: auto; flex: 1; padding-bottom: var(--safe-bottom); }
 
@@ -365,6 +373,57 @@ html, body {
   font-size: 13px;
   margin-bottom: 12px;
 }
+
+/* ---------- 播放/录制动态指示 ---------- */
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@keyframes wave { 0%, 100% { height: 4px; } 50% { height: 15px; } }
+@keyframes breath { 0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,.5); } 50% { box-shadow: 0 0 0 14px rgba(239,68,68,0); } }
+
+.now-playing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--accent);
+  background: rgba(59,130,246,.10);
+  border-bottom: 1px solid rgba(59,130,246,.15);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.np-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
+.np-bars i { width: 3px; height: 5px; border-radius: 2px; background: var(--accent); animation: wave .8s ease-in-out infinite; }
+.np-bars i:nth-child(2) { animation-delay: .15s; }
+.np-bars i:nth-child(3) { animation-delay: .3s; }
+.np-text { max-width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.voice-btn.playing { background: rgba(59,130,246,.28); border-radius: 8px; }
+.voice-btn.playing .voice-icon { animation: pulse .8s infinite; }
+.voice-btn.playing .voice-dur { color: var(--text); }
+
+.msg.tts-playing { box-shadow: 0 0 0 2px var(--accent), 0 0 14px rgba(59,130,246,.45); }
+
+.ptt-btn.holding { animation: breath 1s infinite; }
+
+.member-speaking { color: var(--success); font-size: 12px; animation: pulse 1s infinite; }
+.sys-msg.speaking { animation: pulse 1s infinite; }
+
+.rec-wave {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  height: 22px;
+  margin-bottom: 8px;
+}
+.rec-wave i { width: 4px; height: 6px; border-radius: 2px; background: var(--danger); animation: wave .7s ease-in-out infinite; }
+.rec-wave i:nth-child(2) { animation-delay: .12s; }
+.rec-wave i:nth-child(3) { animation-delay: .24s; }
+.rec-wave i:nth-child(4) { animation-delay: .36s; }
+.rec-wave i:nth-child(5) { animation-delay: .48s; }
+
+.btn-voice-msg.recording { background: var(--danger); animation: breath 1s infinite; }
 
 /* 滚动条 */
 ::-webkit-scrollbar { width: 6px; }

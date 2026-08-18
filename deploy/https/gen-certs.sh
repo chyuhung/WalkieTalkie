@@ -7,10 +7,11 @@
 # 生成到 /etc/nginx/certs/，并在当前目录留下 walkielog.crt 供 iOS 安装
 set -euo pipefail
 
+SCRIPT_CWD="$(pwd)"
 CERT_DIR="/etc/nginx/certs"
 CERT_NAME="${CERT_NAME:-walkielog}"
 DAYS="${DAYS:-365}"
-OUT_CRT="${OUT_CRT:-./walkielog.crt}"
+OUT_CRT="${OUT_CRT:-$SCRIPT_CWD/walkielog.crt}"
 
 IPS=("$@")
 if [ ${#IPS[@]} -eq 0 ]; then

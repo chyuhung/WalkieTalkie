@@ -20,6 +20,7 @@
     lastMsgId: 0,
     firstMsgId: Infinity,
     renderedIds: {},     // 已渲染的消息 id（去重）
+    ttsMsgId: null,      // 当前正在朗读的消息 id
     recording: null,     // Voice.record() 句柄
     pttHolding: false,
     iceConfig: { iceServers: [] }
@@ -344,6 +345,7 @@
     if (!isHistory) { $('messages').scrollTop = $('messages').scrollHeight; }
     // 文字消息自动朗读（仅实时消息，且开启）
     if (m.type === 'text' && !isHistory && m.user_id !== state.me.id) {
+      state.ttsMsgId = m.id;
       window.Voice.speak(m.content);
     }
     if (m.id > state.lastMsgId) { state.lastMsgId = m.id; }
@@ -387,6 +389,7 @@
         var el = document.createElement('audio');
         el.src = url;
         el.onended = function () { vb.classList.remove('playing'); el.remove(); };
+        el.onerror = function () { vb.classList.remove('playing'); el.remove(); };
         vb.classList.add('playing');
         el.play();
       });
@@ -394,6 +397,7 @@
     var tp = div.querySelector('.tts-play');
     if (tp) {
       tp.addEventListener('click', function () {
+        state.ttsMsgId = m.id;
         window.Voice.speakOnce(tp.dataset.text);
       });
     }
@@ -403,6 +407,24 @@
   function formatTime(ts) {
     if (!ts) { return ''; }
     return String(ts).slice(5, 16);
+  }
+
+  /* ---------------- 播放/朗读动态指示 ---------------- */
+  function setNowPlaying(playing, text) {
+    var np = $('now-playing');
+    if (!np) { return; }
+    if (playing) {
+      $('now-playing-text').textContent = text ? '正在朗读：' + text : '正在播放';
+      np.classList.remove('hidden');
+      if (state.ttsMsgId) {
+        var el = document.querySelector('.msg[data-id="' + state.ttsMsgId + '"]');
+        if (el) { el.classList.add('tts-playing'); }
+      }
+    } else {
+      np.classList.add('hidden');
+      var all = document.querySelectorAll('.msg.tts-playing');
+      for (var i = 0; i < all.length; i++) { all[i].classList.remove('tts-playing'); }
+    }
   }
 
   /* ---------------- 成员 ---------------- */
@@ -478,6 +500,8 @@
   /* ---------------- 语音消息录制 ---------------- */
   function startRecording() {
     $('voice-rec-modal').classList.remove('hidden');
+    $('rec-wave').classList.remove('hidden');
+    $('btn-voice-msg').classList.add('recording');
     $('btn-rec-send').disabled = true;
     $('rec-status').textContent = '正在请求麦克风…';
     $('rec-time').textContent = '0.0s';
@@ -504,6 +528,8 @@
     $('btn-rec-send').disabled = true;
     rec.stop().then(function (result) {
       $('voice-rec-modal').classList.add('hidden');
+      $('rec-wave').classList.add('hidden');
+      $('btn-voice-msg').classList.remove('recording');
       uploadVoice(result);
     });
   }
@@ -515,27 +541,45 @@
       clearInterval(state.recTimer);
     }
     $('voice-rec-modal').classList.add('hidden');
+    $('rec-wave').classList.add('hidden');
+    $('btn-voice-msg').classList.remove('recording');
   }
 
   function uploadVoice(result) {
-    var fd = new FormData();
-    fd.append('room_id', state.room.id);
-    fd.append('audio', result.blob, 'voice' + (result.blob.type.indexOf('mp4') >= 0 ? '.mp4' : '.webm'));
-    fd.append('duration', result.duration.toFixed(1));
-    fd.append('transcript', window.Voice.isASR() && result.transcript ? result.transcript : '');
-    api('/api/messages/voice', { method: 'POST', body: fd })
-      .then(function (m) {
-        addMessage(m);
-      })
-      .catch(function (err) {
-        alert('上传语音失败：' + err.message);
-      });
+    function buildFD(t) {
+      var fd = new FormData();
+      fd.append('room_id', state.room.id);
+      fd.append('audio', result.blob, 'voice' + (result.blob.type.indexOf('mp4') >= 0 ? '.mp4' : '.webm'));
+      fd.append('duration', result.duration.toFixed(1));
+      fd.append('transcript', t || '');
+      return fd;
+    }
+    function doUpload(t) {
+      return api('/api/messages/voice', { method: 'POST', body: buildFD(t) })
+        .then(function (m) { addMessage(m); })
+        .catch(function (err) { alert('上传语音失败：' + err.message); });
+    }
+    var transcript = window.Voice.isASR() && result.transcript ? result.transcript : '';
+    if (!transcript && window.Voice.isASR()) {
+      // 浏览器识别为空（Edge/Safari 兼容性差）→ 尝试服务器端 ASR 兜底，未配置则忽略
+      var fd = new FormData();
+      fd.append('audio', result.blob, 'voice' + (result.blob.type.indexOf('mp4') >= 0 ? '.mp4' : '.webm'));
+      return api('/api/asr', { method: 'POST', body: fd })
+        .then(function (d) { return d.text || ''; })
+        .catch(function () { return ''; })
+        .then(function (t) { return doUpload(t); });
+    }
+    return doUpload(transcript);
   }
 
   /* ---------------- 初始化 ---------------- */
   function init() {
     window.PTT.setStateCallback(function (talking) {
       if (talking) { renderMembers(); }
+    });
+
+    window.Voice.setSpeakListener(function (speaking, text) {
+      setNowPlaying(speaking, text);
     });
 
     $('btn-logout').addEventListener('click', function () {

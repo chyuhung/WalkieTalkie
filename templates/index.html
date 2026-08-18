@@ -54,6 +54,12 @@
         <ul id="members-list"></ul>
       </div>
 
+      <!-- 播放/朗读动态指示 -->
+      <div id="now-playing" class="now-playing hidden">
+        <span class="np-bars"><i></i><i></i><i></i></span>
+        <span class="np-text" id="now-playing-text">正在播放</span>
+      </div>
+
       <div id="messages" class="messages"></div>
 
       <!-- 语音转文字开关提示 -->
@@ -89,6 +95,7 @@
       <div class="modal-card">
         <h3>录制语音消息</h3>
         <div class="rec-status" id="rec-status">准备中…</div>
+        <div class="rec-wave hidden" id="rec-wave"><i></i><i></i><i></i><i></i><i></i></div>
         <div class="rec-time" id="rec-time">0.0s</div>
         <div class="rec-actions">
           <button id="btn-rec-cancel" class="btn">取消</button>

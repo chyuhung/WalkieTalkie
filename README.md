@@ -52,30 +52,30 @@ docker compose up -d --build
 
 不需要域名，直接用服务器 IP 做 HTTPS。配置文件在 `deploy/https/`：
 
-```bash
-# 1) 在服务器生成自签证书（替换成你的服务器 IP；局域网 IP 可多个）
-bash deploy/https/gen-certs.sh 8.134.203.172 192.168.1.100
+1. **在服务器生成自签证书**（填服务器公网 IP；如需局域网直连可追加局域网 IP）：
+   ```bash
+   cd /root/WalkieTalkie && git pull origin main   # 确保脚本是最新版（证书含 CA:TRUE）
+   bash deploy/https/gen-certs.sh 8.134.203.172
+   ```
 
-# 2) 安装 Nginx 并套上反代配置
-apt install -y nginx
-cp deploy/https/nginx-https.conf /etc/nginx/conf.d/walkietalkie.conf
-nginx -t && systemctl reload nginx
-```
+2. **安装 Nginx 并套上反代配置**：
+   ```bash
+   apt install -y nginx
+   cp deploy/https/nginx-https.conf /etc/nginx/conf.d/walkietalkie.conf
+   nginx -t && systemctl reload nginx
+   ```
 
-3. `docker-compose.yml` 默认已把 8083 绑到 `127.0.0.1`（仅本机可达，必须经 Nginx HTTPS）；在安全组/防火墙只开放 **443**，**关闭公网 8083**
-4. iPhone 安装并信任证书（顺序不可省略）：
-   - 若安装过旧证书：**设置 → 通用 → VPN与设备管理 → 删除旧描述文件**
-   - 把 `walkielog.crt` 通过 AirDrop/邮件/网盘传到手机 → 打开 → **已下载的描述文件 → 安装**
-   - **设置 → 通用 → 关于本机 → 证书信任设置 → 开启「完全信任」**（此证书必须出现在该列表里；只有出现并开启才说明 CA 信任生效，Safari 才会放行）
-   - **彻底关闭 Safari（上滑卡片杀掉）再重新打开** 访问
-5. Safari 访问 `https://8.134.203.172` 即可（**必须使用证书 SAN 里包含的 IP**，不能是 Docker 网段 172.x）
+3. `docker-compose.yml` 默认把 8083 绑到 `127.0.0.1`（仅本机可达，必须经 Nginx 访问）；安全组/防火墙只开放 **443**
 
-> 注意：iOS 对被信任的证书有效期有 1 年限制，到期需重新生成并重装。
->
-> 若仍提示「此连接非私人连接 / 此网站可能在冒充」：
-> - 在服务器执行 `openssl x509 -in /etc/nginx/certs/walkielog.crt -noout -text | grep -i "CA:"`，应输出 `CA:TRUE`（旧证书缺少该扩展，需重新执行 `gen-certs.sh` 重新生成）
-> - 核对访问的 IP 是否在证书 SAN 里：`openssl x509 -in /etc/nginx/certs/walkielog.crt -noout -text | grep -A1 "Subject Alternative"`
-> - 重新生成后记得 `systemctl reload nginx`，并让手机删除旧描述文件后重装新证书
+4. **iPhone 安装并信任证书**：
+   - 若装过旧证书，先删除：**设置 → 通用 → VPN与设备管理 → 删除旧描述文件**
+   - 把 `walkielog.crt`（生成在项目目录，即 `gen-certs.sh` 的执行目录）通过 AirDrop/邮件/网盘传到手机 → 打开 → **已下载的描述文件 → 安装**
+   - **设置 → 通用 → 关于本机 → 证书信任设置 → 开启「完全信任」**（证书必须出现在该列表里才可开启；出现即说明 CA 信任已生效）
+   - **彻底关闭 Safari（上滑卡片杀掉）再重新打开**
+
+5. Safari 访问 `https://8.134.203.172` 即可
+
+> 注意：iOS 对被信任的证书有效期有 1 年限制，到期需重新生成并重装（重新执行 `gen-certs.sh` → `systemctl reload nginx` → 手机删旧装新）。
 >
 > 自测时可选 Chrome 实验参数（仅桌面端）：
 > `chrome --unsafely-treat-insecure-origin-as-secure="http://192.168.x.x:8083"`
