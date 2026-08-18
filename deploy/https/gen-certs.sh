@@ -37,6 +37,9 @@ openssl req -x509 -newkey rsa:2048 \
   -nodes \
   -subj "/C=CN/O=WalkieTalkie/CN=${IPS[0]}" \
   -addext "subjectAltName=${SAN_ARGS}" \
+  -addext "basicConstraints=critical,CA:TRUE" \
+  -addext "keyUsage=critical,keyCertSign,digitalSignature,keyEncipherment" \
+  -addext "subjectKeyIdentifier=hash" \
   >/dev/null 2>&1
 
 chmod 600 "$CERT_NAME.key"
@@ -49,6 +52,9 @@ echo "✔ 证书已生成："
 echo "  私钥: $CERT_DIR/$CERT_NAME.key"
 echo "  证书: $CERT_DIR/$CERT_NAME.crt"
 echo "  安装用: $OUT_CRT"
+echo ""
+echo "SAN 包含以下地址（iOS 必须用其中之一访问）："
+openssl x509 -in "$CERT_NAME.crt" -noout -text | grep -A1 "Subject Alternative" | tail -n +2 | tr ',' '\n' | sed 's/^/    /'
 echo ""
 echo "下一步："
 echo "  1) apt install nginx；把 nginx-https.conf 放入 /etc/nginx/conf.d/"
