@@ -2,7 +2,6 @@ package hub
 
 import (
 	"encoding/json"
-	"log"
 	"sync"
 )
 
@@ -18,9 +17,25 @@ type Message struct {
 type Client struct {
 	ID       int64
 	Username string
-	Room     int64
 	Send     chan []byte
 	hub      *Hub
+
+	mu   sync.Mutex // 保护 room（WS 读协程与 HTTP 处理协程并发访问）
+	room int64
+}
+
+// GetRoom 返回客户端当前所在房间
+func (c *Client) GetRoom() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.room
+}
+
+// SetRoom 设置客户端当前所在房间
+func (c *Client) SetRoom(id int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.room = id
 }
 
 func (c *Client) sendJSON(v interface{}) {
@@ -80,6 +95,8 @@ func (r *Room) relay(msg interface{}, to int64) {
 type Hub struct {
 	rooms map[int64]*Room
 	mu    sync.RWMutex
+	// MemberCheck 校验用户是否为房间成员；nil 表示不校验
+	MemberCheck func(userID, roomID int64) bool
 }
 
 func NewHub() *Hub {
@@ -107,7 +124,7 @@ func (h *Hub) RegisterRoom(id int64, name string) *Room {
 
 // Join 将客户端加入房间并通知其他成员
 func (h *Hub) Join(c *Client) {
-	r := h.Room(c.Room)
+	r := h.Room(c.GetRoom())
 	if r == nil {
 		return
 	}
@@ -125,17 +142,20 @@ func (h *Hub) Join(c *Client) {
 
 // Leave 将客户端移出房间并广播
 func (h *Hub) Leave(c *Client) {
-	if c.Room == 0 {
+	c.mu.Lock()
+	roomID := c.room
+	c.room = 0
+	c.mu.Unlock()
+	if roomID == 0 {
 		return
 	}
-	r := h.Room(c.Room)
+	r := h.Room(roomID)
 	if r == nil {
 		return
 	}
 	r.mu.Lock()
 	delete(r.clients, c.ID)
 	r.mu.Unlock()
-	c.Room = 0
 
 	r.broadcast(map[string]interface{}{
 		"type": "user_left",
@@ -185,26 +205,17 @@ func (h *Hub) Speaking(roomID, userID int64, talking bool) {
 	})
 }
 
-// ForceLeave 强制某用户离开当前房间（用于退出/删除房间时同步在线状态）
-func (h *Hub) ForceLeave(userID int64) {
-	h.mu.RLock()
-	var target *Client
-	for _, r := range h.rooms {
-		r.mu.RLock()
-		for _, c := range r.clients {
-			if c.ID == userID {
-				target = c
-				break
-			}
-		}
-		r.mu.RUnlock()
-		if target != nil {
-			break
-		}
+// ForceLeaveRoom 强制某用户离开指定房间
+func (h *Hub) ForceLeaveRoom(userID, roomID int64) {
+	r := h.Room(roomID)
+	if r == nil {
+		return
 	}
-	h.mu.RUnlock()
-	if target != nil {
-		h.Leave(target)
+	r.mu.RLock()
+	c := r.clients[userID]
+	r.mu.RUnlock()
+	if c != nil {
+		h.Leave(c)
 	}
 }
 
@@ -232,7 +243,7 @@ func (h *Hub) DeleteRoom(roomID int64) {
 	room.mu.Unlock()
 
 	for _, c := range clients {
-		c.Room = 0
+		c.SetRoom(0)
 	}
 }
 
@@ -255,5 +266,3 @@ func (h *Hub) Shutdown() {
 		r.mu.RUnlock()
 	}
 }
-
-var _ = log.Println

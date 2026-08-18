@@ -84,7 +84,7 @@ func JoinRoom(db *sql.DB, registerRoom func(id int64, name string) interface{}) 
 }
 
 // LeaveRoom 退出房间（移除成员关系）
-func LeaveRoom(db *sql.DB, forceLeave func(userID int64)) gin.HandlerFunc {
+func LeaveRoom(db *sql.DB, forceLeave func(userID, roomID int64)) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		roomID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 		if err != nil {
@@ -101,7 +101,7 @@ func LeaveRoom(db *sql.DB, forceLeave func(userID int64)) gin.HandlerFunc {
 			c.JSON(http.StatusNotFound, gin.H{"error": "你尚未加入该房间"})
 			return
 		}
-		forceLeave(userID)
+		forceLeave(userID, roomID)
 		// 房主退出且房间无人时，允许后续清理由删除操作完成
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	}
@@ -125,13 +125,15 @@ func DeleteRoom(db *sql.DB, uploadDir string, deleteRoom func(roomID int64)) gin
 			c.JSON(http.StatusForbidden, gin.H{"error": "只有房主才能删除房间"})
 			return
 		}
+		// 先收集语音文件 URL（级联删除消息后无法再查到）
+		urls := roomAudioURLs(db, roomID)
 		// 真删除，messages/room_members 由外键级联删除
 		if _, err := db.Exec("DELETE FROM rooms WHERE id = ?", roomID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败"})
 			return
 		}
 		deleteRoom(roomID)
-		cleanupRoomAudio(db, uploadDir, roomID)
+		removeAudioFiles(uploadDir, urls)
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"mime/multipart"
 	"os"
 	"path/filepath"
@@ -18,11 +19,21 @@ func nowStr() string {
 	return time.Now().UTC().Format("2006-01-02 15:04:05")
 }
 
+// allowedAudioExts 允许的音频扩展名白名单（防上传任意文件导致存储型 XSS）
+var allowedAudioExts = map[string]bool{
+	".webm": true,
+	".mp4":  true,
+	".ogg":  true,
+	".m4a":  true,
+	".wav":  true,
+	".aac":  true,
+}
+
 // saveAudio 保存上传的音频文件，返回 URL 路径
 func saveAudio(c *gin.Context, file *multipart.FileHeader) (string, error) {
-	ext := filepath.Ext(file.Filename)
-	if ext == "" {
-		ext = ".webm"
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	if !allowedAudioExts[ext] {
+		return "", errInvalidAudioType
 	}
 	name := time.Now().UTC().Format("20060102150405") + "_" + randName(8) + ext
 	dst := filepath.Join(c.GetString("upload_dir"), name)
@@ -39,17 +50,28 @@ func randName(n int) string {
 	return hex.EncodeToString(b)[:n*2]
 }
 
-// cleanupRoomAudio 删除房间删除后遗留的语音文件
-func cleanupRoomAudio(db *sql.DB, uploadDir string, roomID int64) {
+// errInvalidAudioType 上传的文件类型不在白名单内
+var errInvalidAudioType = errors.New("音频文件类型不支持")
+
+// roomAudioURLs 查询房间内所有语音消息的音频 URL（在级联删除消息前调用）
+func roomAudioURLs(db *sql.DB, roomID int64) []string {
 	rows, err := db.Query("SELECT audio_url FROM messages WHERE room_id = ? AND msg_type = 'voice' AND audio_url != ''", roomID)
 	if err != nil {
-		return
+		return nil
 	}
 	defer rows.Close()
+	var urls []string
 	for rows.Next() {
 		var url string
 		rows.Scan(&url)
-		// /audio/xxx.ext -> dir/xxx.ext
+		urls = append(urls, url)
+	}
+	return urls
+}
+
+// removeAudioFiles 删除语音文件（/audio/xxx.ext -> dir/xxx.ext）
+func removeAudioFiles(uploadDir string, urls []string) {
+	for _, url := range urls {
 		name := strings.TrimPrefix(url, "/audio/")
 		if name == url {
 			continue

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -90,7 +91,11 @@ func UploadVoice(db *sql.DB, broadcast func(roomID int64, msg interface{}), maxS
 		}
 		url, err := saveAudio(c, file)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "保存音频失败: " + err.Error()})
+			if errors.Is(err, errInvalidAudioType) {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "保存音频失败: " + err.Error()})
+			}
 			return
 		}
 		duration, _ := strconv.ParseFloat(c.PostForm("duration"), 64)
@@ -122,6 +127,10 @@ func GetMessages(db *sql.DB) gin.HandlerFunc {
 		roomID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "房间 ID 无效"})
+			return
+		}
+		if !isMember(db, roomID, c.GetInt64("user_id")) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "尚未加入该房间"})
 			return
 		}
 		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))

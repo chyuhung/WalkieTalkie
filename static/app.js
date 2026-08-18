@@ -463,7 +463,12 @@
       btn.classList.remove('holding');
       window.PTT.talkStop();
     }
-    btn.addEventListener('pointerdown', function (e) { e.preventDefault(); press(); });
+    btn.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      press();
+      // 捕获指针，防止手指滑出按钮时误松开发送
+      if (btn.setPointerCapture) { try { btn.setPointerCapture(e.pointerId); } catch (err) {} }
+    });
     btn.addEventListener('pointerup', release);
     btn.addEventListener('pointercancel', release);
     btn.addEventListener('pointerleave', release);

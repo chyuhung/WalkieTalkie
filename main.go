@@ -28,6 +28,9 @@ func main() {
 	dbPath := viper.GetString("database.path")
 	uploadDir := viper.GetString("upload.dir")
 	secret := viper.GetString("session.secret")
+	if secret == "change-me-to-a-long-random-string" || len(secret) < 16 {
+		log.Println("警告: session.secret 为默认值或过短，请修改 config.yaml 中的 session.secret，否则会话可被伪造！")
+	}
 
 	if dir := filepath.Dir(dbPath); dir != "." {
 		if err := os.MkdirAll(dir, 0755); err != nil {
@@ -38,7 +41,7 @@ func main() {
 		log.Fatalf("创建音频目录失败: %v", err)
 	}
 
-	dsn := "file:" + dbPath + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
+	dsn := "file:" + dbPath + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		log.Fatalf("无法连接到数据库: %v", err)
@@ -50,6 +53,12 @@ func main() {
 	runMigrations(db)
 
 	hubInstance := hub.NewHub()
+	// 服务端校验 WS join 的房间成员关系
+	hubInstance.MemberCheck = func(userID, roomID int64) bool {
+		var cnt int
+		db.QueryRow("SELECT COUNT(*) FROM room_members WHERE room_id = ? AND user_id = ?", roomID, userID).Scan(&cnt)
+		return cnt > 0
+	}
 
 	// 配置第三方 ASR（可选）
 	handlers.SetupASR(&handlers.ASRConfig{
@@ -88,15 +97,15 @@ func main() {
 		c.HTML(http.StatusOK, "register.html", nil)
 	})
 
-	// 认证 API
-	r.POST("/api/register", handlers.Register(db))
-	r.POST("/api/login", handlers.Login(db))
+	// 认证 API（登录/注册加简单速率限制）
+	r.POST("/api/register", handlers.RateLimit(10, "1m"), handlers.Register(db))
+	r.POST("/api/login", handlers.RateLimit(10, "1m"), handlers.Login(db))
 	r.POST("/api/logout", auth, handlers.Logout())
 	r.GET("/api/me", auth, handlers.CurrentUser())
 
-	// 静态与音频
+	// 静态资源与音频（音频带鉴权，防越权下载）
 	r.Static("/static", "./static")
-	r.Static("/audio", uploadDir)
+	r.GET("/audio/*filepath", auth, handlers.ServeAudio(uploadDir))
 
 	api := r.Group("/api")
 	api.Use(auth)
@@ -111,7 +120,7 @@ func main() {
 		api.GET("/rooms", handlers.GetRooms(db))
 		api.GET("/rooms/all", handlers.ListAllRooms(db))
 		api.POST("/rooms/:id/join", handlers.JoinRoom(db, registerRoomFunc(hubInstance)))
-		api.POST("/rooms/:id/leave", handlers.LeaveRoom(db, hubInstance.ForceLeave))
+		api.POST("/rooms/:id/leave", handlers.LeaveRoom(db, hubInstance.ForceLeaveRoom))
 		api.DELETE("/rooms/:id", handlers.DeleteRoom(db, uploadDir, hubInstance.DeleteRoom))
 		// 消息
 		api.POST("/messages", handlers.SendTextMessage(db, hubInstance.Broadcast))

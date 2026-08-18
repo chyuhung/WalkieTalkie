@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"net/http"
+	"net/url"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -13,8 +14,18 @@ import (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
-	// 跨设备（含局域网内其他设备）访问时需要允许任意 Origin
-	CheckOrigin: func(r *http.Request) bool { return true },
+	// 仅允许同源 WebSocket；无 Origin 的旧式客户端放行
+	CheckOrigin: func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true
+		}
+		u, err := url.Parse(origin)
+		if err != nil {
+			return false
+		}
+		return u.Host == r.Host
+	},
 }
 
 // WS 建立 WebSocket 连接（WebRTC 信令 + 在线状态 + 聊天）

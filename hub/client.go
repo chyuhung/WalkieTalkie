@@ -27,7 +27,12 @@ func (h *Hub) HandleSignals(c *Client, msg Message) {
 		if msg.Room == 0 {
 			return
 		}
-		c.Room = msg.Room
+		// 服务端校验成员关系，防止伪造 join 混入未加入的房间
+		if h.MemberCheck != nil && !h.MemberCheck(c.ID, msg.Room) {
+			c.sendJSON(map[string]interface{}{"type": "error", "data": "尚未加入该房间"})
+			return
+		}
+		c.SetRoom(msg.Room)
 		h.Join(c)
 	case "leave":
 		h.Leave(c)
@@ -36,12 +41,16 @@ func (h *Hub) HandleSignals(c *Client, msg Message) {
 			Talking bool `json:"talking"`
 		}
 		json.Unmarshal(msg.Data, &data)
-		h.Speaking(c.Room, c.ID, data.Talking)
+		h.Speaking(c.GetRoom(), c.ID, data.Talking)
 	case "webrtc_offer", "webrtc_answer", "webrtc_ice":
-		if msg.To == 0 || c.Room == 0 {
+		if msg.To == 0 {
 			return
 		}
-		r := h.Room(c.Room)
+		roomID := c.GetRoom()
+		if roomID == 0 {
+			return
+		}
+		r := h.Room(roomID)
 		if r == nil {
 			return
 		}
