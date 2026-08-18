@@ -386,12 +386,14 @@
       inner += '<div class="voice-btn" data-url="' + esc(m.audio_url) + '">' +
         '<span class="voice-icon">🔊</span><span class="voice-dur">' + dur + '</span></div>';
       var hasTranscript = m.content && m.content.trim().length > 0;
-      if (hasTranscript) {
-        inner += '<div class="transcript"><span class="transcript-tag">[转文字]</span>' + esc(m.content) + '</div>';
-      } else if (window.Voice.browserASR()) {
-        inner += '<div class="no-transcript">📝 无转写文本（浏览器语音识别未返回内容）</div>';
-      } else {
-        inner += '<div class="no-transcript">📝 该浏览器不支持实时转写</div>';
+      if (window.Voice.isASR()) {
+        if (hasTranscript) {
+          inner += '<div class="transcript"><span class="transcript-tag">[转文字]</span>' + esc(m.content) + '</div>';
+        } else if (window.Voice.browserASR()) {
+          inner += '<div class="no-transcript">📝 无转写文本（浏览器语音识别未返回内容）</div>';
+        } else {
+          inner += '<div class="no-transcript">📝 该浏览器不支持实时转写</div>';
+        }
       }
     }
     inner += '<div class="time">' + esc(formatTime(m.created_at)) + '</div>';
