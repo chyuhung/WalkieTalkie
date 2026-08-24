@@ -4,11 +4,14 @@
 window.PTT = (function () {
   'use strict';
 
-  var peers = {};        // userId -> { pc, senderTrack, audioEl }
+  var peers = {};            // userId -> { pc, senderTracks, audioEl, attached }
   var localStream = null;
   var micGranted = false;
   var iceConfig = { iceServers: [] };
   var onStateChange = null;  // 回调，通知 UI 某成员说话状态
+  var onConnFail = null;     // 回调，通知 UI 某成员语音连接失败
+  var pendingOffers = {};    // userId -> 暂存无法立即处理的 offer（防 glare）
+  var pendingPlays = {};     // userId -> 远端音频被自动播放拦截，待手势解锁
 
   function send(obj) {
     if (window.PTT.send && window.PTT.send(obj)) { /* ok */ }
@@ -19,6 +22,7 @@ window.PTT = (function () {
   }
 
   function setStateCallback(fn) { onStateChange = fn; }
+  function setConnFailCallback(fn) { onConnFail = fn; }
 
   // 获取麦克风流（复用，避免每次按住说话都弹权限框）
   function ensureMic() {
@@ -51,6 +55,21 @@ window.PTT = (function () {
         ensureAudioEl(remoteId, ev.streams[0]);
       }
     };
+    // 信令回到 stable 后处理排队中的 offer（防 glare）
+    pc.onsignalingstatechange = function () {
+      if (pc.signalingState === 'stable' && pendingOffers[remoteId]) {
+        var d = pendingOffers[remoteId];
+        delete pendingOffers[remoteId];
+        doAnswer(remoteId, d);
+      }
+    };
+    pc.onconnectionstatechange = function () {
+      console.log('PTT 连接状态 [' + remoteId + ']:', pc.connectionState);
+      if (pc.connectionState === 'failed' && onConnFail) {
+        onConnFail(remoteId);
+        restartIce(remoteId);
+      }
+    };
     if (localStream) { attachTracks(remoteId); }
     return pc;
   }
@@ -73,17 +92,44 @@ window.PTT = (function () {
     }
     var audio = document.createElement('audio');
     audio.autoplay = true;
+    audio.setAttribute('playsinline', '');
     audio.srcObject = stream;
     document.body.appendChild(audio);
     entry.audioEl = audio;
-    audio.play().catch(function () { /* 自动播放限制由手势解锁 */ });
+    tryPlay(remoteId);
   }
 
-  // 解锁自动播放（首次 PTT 按下时调用）
+  // 播放远端音频；被自动播放策略拦截则记录，待用户手势后重试
+  function tryPlay(remoteId) {
+    var entry = peers[remoteId];
+    if (!entry || !entry.audioEl) { return; }
+    entry.audioEl.play().then(function () {
+      delete pendingPlays[remoteId];
+    }).catch(function () {
+      pendingPlays[remoteId] = true;
+    });
+  }
+
+  // 重试所有被拦截的播放（需在用户手势内调用：任意点击 / 按 PTT）
   function unlockAudio() {
-    Object.keys(peers).forEach(function (id) {
-      var el = peers[id].audioEl;
-      if (el) { el.play().catch(function () {}); }
+    if (!Object.keys(pendingPlays).length) { return; }
+    Object.keys(pendingPlays).forEach(tryPlay);
+  }
+
+  // 任意点击页面即可解锁移动端远端音频播放
+  document.addEventListener('pointerdown', unlockAudio);
+
+  // 等待信令状态回到 stable 再继续，避免协商冲突（glare）
+  function whenStable(pc) {
+    if (pc.signalingState === 'stable') { return Promise.resolve(); }
+    return new Promise(function (resolve) {
+      var h = function () {
+        if (pc.signalingState === 'stable') {
+          pc.removeEventListener('signalingstatechange', h);
+          resolve();
+        }
+      };
+      pc.addEventListener('signalingstatechange', h);
     });
   }
 
@@ -96,33 +142,60 @@ window.PTT = (function () {
     }).catch(function (e) { console.error('offer 失败', e); });
   }
 
-  // 已建立连接后再挂入音轨需重新协商
+  // 已建立连接后再挂入音轨需重新协商；仅 stable 时发起，防止 glare
   function negotiate(remoteId) {
     var entry = peers[remoteId];
     if (!entry) { return Promise.resolve(); }
-    return entry.pc.createOffer().then(function (offer) {
-      return entry.pc.setLocalDescription(offer);
+    var pc = entry.pc;
+    return whenStable(pc).then(function () {
+      return pc.createOffer();
+    }).then(function (offer) {
+      return pc.setLocalDescription(offer);
     }).then(function () {
-      send({ type: 'webrtc_offer', to: remoteId, data: { sdp: entry.pc.localDescription } });
+      send({ type: 'webrtc_offer', to: remoteId, data: { sdp: pc.localDescription } });
     }).catch(function (e) { console.error('renegotiate 失败', e); });
   }
 
-  function handleOffer(from, data) {
-    var pc = createPeer(from);
+  // 应答对方 offer（音轨在 createPeer 时已挂上，answer 自带音频，无需再协商）
+  function doAnswer(from, data) {
+    var pc = peers[from] && peers[from].pc;
+    if (!pc) { return Promise.resolve(); }
     return pc.setRemoteDescription(new RTCSessionDescription(data.sdp))
       .then(function () { return pc.createAnswer(); })
       .then(function (answer) { return pc.setLocalDescription(answer); })
       .then(function () {
         send({ type: 'webrtc_answer', to: from, data: { sdp: pc.localDescription } });
       })
-      .catch(function (e) { console.error('answer 失败', e); });
+      .catch(function (e) {
+        console.error('answer 失败', e);
+        delete pendingOffers[from];
+      });
+  }
+
+  function handleOffer(from, data) {
+    var pc = createPeer(from);
+    // 本端有协商在途：先排队，等回到 stable 再应答（防 glare）
+    if (pc.signalingState !== 'stable') {
+      pendingOffers[from] = data;
+      return Promise.resolve();
+    }
+    return doAnswer(from, data);
   }
 
   function handleAnswer(from, data) {
     var entry = peers[from];
-    if (!entry) { return Promise.resolve(); }
+    // 仅在等待 answer 的状态下接受，防止杂散消息破坏状态机
+    if (!entry || entry.pc.signalingState !== 'have-local-offer') { return Promise.resolve(); }
     return entry.pc.setRemoteDescription(new RTCSessionDescription(data.sdp))
       .catch(function (e) { console.error('setRemoteDescription 失败', e); });
+  }
+
+  // ICE 连接失败后的重试：标记 restart 并重发 offer
+  function restartIce(remoteId) {
+    var entry = peers[remoteId];
+    if (!entry || !entry.pc.restartIce) { return; }
+    try { entry.pc.restartIce(); } catch (e) {}
+    negotiate(remoteId);
   }
 
   function handleIce(from, data) {
@@ -186,6 +259,8 @@ window.PTT = (function () {
   return {
     setIce: setIce,
     setStateCallback: setStateCallback,
+    setConnFailCallback: setConnFailCallback,
+    ensureMic: ensureMic,
     initiate: initiate,
     negotiate: negotiate,
     handleOffer: handleOffer,

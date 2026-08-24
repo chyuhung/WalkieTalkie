@@ -65,7 +65,7 @@ docker compose up -d --build
    nginx -t && systemctl reload nginx
    ```
 
-3. `docker-compose.yml` 默认把 8083 绑到 `127.0.0.1`（仅本机可达，必须经 Nginx 访问）；安全组/防火墙只开放 **443**
+3. `docker-compose.yml` 默认把 8083 绑到 `127.0.0.1`（仅本机可达，必须经 Nginx 访问）；安全组/防火墙只开放 **443**（后续部署 TURN 需额外放行对应端口，见下文）
 
 4. **iPhone 安装并信任证书**：
    - 若装过旧证书，先删除：**设置 → 通用 → VPN与设备管理 → 删除旧描述文件**
@@ -79,6 +79,30 @@ docker compose up -d --build
 >
 > 自测时可选 Chrome 实验参数（仅桌面端）：
 > `chrome --unsafely-treat-insecure-origin-as-secure="http://192.168.x.x:8083"`
+
+#### 跨公网对讲：部署 TURN（coturn）
+
+不同网络（如手机流量 vs 家里宽带）之间的实时对讲需要 TURN 中继。项目已内置 Docker 配置（`docker-compose.yml` 中的 `coturn` 服务 + `deploy/turnserver.conf`）：
+
+1. **修改密码**：编辑 `deploy/turnserver.conf`，把 `<强密码>` 改成你的强密码
+2. **启动服务**：
+   ```bash
+   cd /root/WalkieTalkie && git pull origin main
+   docker compose up -d   # 同时启动 walkietalkie 与 coturn
+   ```
+3. **放行端口**（安全组 + 本机防火墙）：TCP/UDP `3478`、UDP `40000-41000`
+4. **启用前端配置**：把 `config.yaml` 中 `ice_servers` 替换为其下方的 TURN 注释行（填服务器公网 IP 与同一密码），然后重启应用容器拉取新配置：
+   ```bash
+   docker compose up -d --build walkietalkie
+   ```
+5. **验证**：
+   ```bash
+   docker logs coturn   # 确认无报错、正常监听 3478
+   docker run --rm coturn/coturn turnutils_uclient -u walkie -w <强密码> -v <公网IP>
+   ```
+   测试客户端能完成分配并输出丢包统计即表示中继可用；最后用两台不同网络的设备实测按住实时对讲。
+
+> 同一 WiFi 下无需 TURN，浏览器 host/mDNS 候选即可直连。
 
 ## 使用说明
 

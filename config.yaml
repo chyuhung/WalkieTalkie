@@ -17,6 +17,8 @@ webrtc:
   # ICE 服务器列表（JSON 数组字符串，逗号分隔多个 STUN/TURN）
   # 局域网对讲通常公网 STUN 即可；跨网络需自建 TURN
   ice_servers: '[{"urls":["stun:stun.l.google.com:19302","stun:stun.cloudflare.com:3478"]}]'
+  # 跨公网对讲：部署 TURN（见 README「TURN 部署」）后，将上行替换为（填公网 IP 与 turnserver.conf 中同一密码）：
+  # ice_servers: '[{"urls":["stun:stun.l.google.com:19302","turn:<公网IP>:3478?transport=udp","turn:<公网IP>:3478?transport=tcp"],"username":"walkie","credential":"<强密码>"}]'
 
 asr:
   # 预留第三方语音转文字接口（如 OpenAI Whisper、火山引擎等）

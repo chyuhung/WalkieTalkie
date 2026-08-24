@@ -273,6 +273,10 @@
       renderMembers();
       loadMessages();
       $('btn-ptt').disabled = false;
+      // 进房即申请麦克风：保证建连时双方都带音轨（初始 offer 即含音频，避免空 SDP 与反复重协商）
+      window.PTT.ensureMic().catch(function () {
+        appendSys('未授权麦克风，无法实时对讲（文字与语音消息不受影响）');
+      });
       if (state.wsReady) {
         state.joining = true;
         sendWS({ type: 'join', room: r.id });
@@ -597,6 +601,11 @@
 
     window.Voice.setSpeakListener(function (speaking, text) {
       setNowPlaying(speaking, text);
+    });
+
+    window.PTT.setConnFailCallback(function (remoteId) {
+      var m = state.members.find(function (x) { return x.id === remoteId; });
+      appendSys((m ? m.username : '成员 ' + remoteId) + ' 的语音连接失败，请检查网络后重试');
     });
 
     $('btn-logout').addEventListener('click', function () {

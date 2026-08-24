@@ -20,3 +20,13 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  coturn:
+    image: coturn/coturn
+    container_name: coturn
+    restart: unless-stopped
+    # host 网络：TURN 需暴露大量 UDP 中继端口，host 模式免逐端口映射
+    network_mode: host
+    volumes:
+      - ./deploy/turnserver.conf:/etc/turnserver.conf:ro
+    command: ["-c", "/etc/turnserver.conf"]
