@@ -36,6 +36,24 @@ docker compose up -d --build
 # 访问 http://<服务器IP>:8083
 ```
 
+> **镜像拉取慢或卡住？** 国内直连 Docker Hub 受限，需给 Docker 配置镜像加速器（仅对 `golang:...`、`alpine:...` 这类官方镜像名生效）：
+>
+> ```bash
+> sudo tee /etc/docker/daemon.json <<'EOF'
+> { "registry-mirrors": ["https://docker.m.daocloud.io", "https://docker.1ms.run", "https://hub.rat.dev"] }
+> EOF
+> sudo systemctl restart docker
+> ```
+>
+> 应急方案：换源预拉取后打回官方 tag，构建直接使用本地缓存：
+>
+> ```bash
+> docker pull docker.m.daocloud.io/library/golang:1.26-alpine
+> docker tag docker.m.daocloud.io/library/golang:1.26-alpine golang:1.26-alpine
+> docker pull docker.m.daocloud.io/library/alpine:3.20
+> docker tag docker.m.daocloud.io/library/alpine:3.20 alpine:3.20
+> ```
+
 ### 方式三：HTTPS 部署（手机对讲必需）
 
 手机浏览器的麦克风要求「安全上下文」（HTTPS 或 localhost）。局域网通过 IP 访问时会被浏览器拦截麦克风权限。
