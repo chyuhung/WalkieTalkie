@@ -24,14 +24,31 @@ window.PTT = (function () {
   function setStateCallback(fn) { onStateChange = fn; }
   function setConnFailCallback(fn) { onConnFail = fn; }
 
+  // 该 peer 是否已挂上并仍有活跃的音轨（用于判断是否需要补协商）
+  function hasLiveAudio(entry) {
+    return !!(entry && entry.attached && entry.senderTracks.length &&
+      entry.senderTracks.every(function (t) { return t.readyState === 'live'; }));
+  }
+
+  // 补挂/补协商：把当前尚未带音轨的 peer 挂上音轨并重发 offer，让音频进入已建立的连接
+  function ensureTracksEverywhere() {
+    Object.keys(peers).forEach(function (id) {
+      var entry = peers[id];
+      var hadLive = hasLiveAudio(entry);
+      if (!entry.attached && localStream) { attachTracks(id); }
+      // 之前无音轨（建连早于麦克风就绪）或音轨已失效 → 需要通过重协商补进 SDP
+      if (!hadLive && hasLiveAudio(entry)) { negotiate(id); }
+    });
+  }
+
   // 获取麦克风流（复用，避免每次按住说话都弹权限框）
   function ensureMic() {
     if (micGranted) { return Promise.resolve(localStream); }
     return navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
       localStream = stream;
       micGranted = true;
-      // 创建 PC 后获取到的流，需补挂到已有 peer
-      Object.keys(peers).forEach(attachTracks);
+      // 创建 PC 后获取到的流，需补挂到已有 peer；建连早于麦克风就绪的需重协商补音频
+      ensureTracksEverywhere();
       return stream;
     }).catch(function (err) {
       console.error('麦克风获取失败', err);
@@ -209,13 +226,11 @@ window.PTT = (function () {
   function talkStart() {
     return ensureMic().then(function () {
       unlockAudio();
-      // 确保所有 peer 都挂上了音轨；新挂上的需要重新协商
+      // 确保所有 peer 都挂上且协商了活跃音轨；缺失的补挂并重协商
       Object.keys(peers).forEach(function (id) {
         var entry = peers[id];
-        if (!entry.attached) {
-          attachTracks(id);
-          negotiate(id);
-        }
+        if (!entry.attached && localStream) { attachTracks(id); }
+        if (!hasLiveAudio(entry)) { negotiate(id); }
       });
       if (localStream) {
         localStream.getAudioTracks().forEach(function (t) { t.enabled = true; });

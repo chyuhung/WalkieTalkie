@@ -316,7 +316,10 @@
       } else {
         container.innerHTML = '';
         msgs.forEach(function (m) { addMessage(m, true); });
-        container.scrollTop = container.scrollHeight;
+        // 滚动到底部：等布局稳定（flex + 异步内容）后再钉，避免停在最旧消息
+        requestAnimationFrame(function () {
+          container.scrollTop = container.scrollHeight;
+        });
       }
     }).catch(function (err) { console.error(err); });
   }
@@ -345,7 +348,15 @@
     if (speakId) { div.setAttribute('data-speak-id', speakId); }
     div.textContent = text;
     $('messages').appendChild(div);
-    $('messages').scrollTop = $('messages').scrollHeight;
+    scrollToBottom();
+  }
+
+  // 滚动到底部（等布局稳定再钉，避免 flex + 异步内容导致停在中间/最旧）
+  function scrollToBottom() {
+    requestAnimationFrame(function () {
+      var c = $('messages');
+      if (c) { c.scrollTop = c.scrollHeight; }
+    });
   }
 
   // 移除指定用户的"正在说话"提示条
@@ -361,7 +372,7 @@
     if (m.id) { state.renderedIds[m.id] = true; }
     var el = buildMessageEl(m);
     $('messages').appendChild(el);
-    if (!isHistory) { $('messages').scrollTop = $('messages').scrollHeight; }
+    if (!isHistory) { scrollToBottom(); }
     // 文字消息自动朗读（仅实时消息，且开启）
     if (m.type === 'text' && !isHistory && m.user_id !== state.me.id) {
       state.ttsMsgId = m.id;
