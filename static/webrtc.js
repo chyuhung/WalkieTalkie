@@ -191,7 +191,17 @@ window.PTT = (function () {
 
   function handleOffer(from, data) {
     var pc = createPeer(from);
-    // 本端有协商在途：先排队，等回到 stable 再应答（防 glare）
+    // glare：本端也在途发起了 offer（have-local-offer）→ 回滚本方 offer 变回 stable，再应答对方 offer
+    if (pc.signalingState === 'have-local-offer') {
+      return pc.setLocalDescription({ type: 'rollback' })
+        .then(function () { return doAnswer(from, data); })
+        .catch(function (e) {
+          // rollback 不支持/失败：保持本方 offer，忽略对方 offer（对方会应答我们）
+          console.error('glare 回滚应答失败', from, e);
+          return Promise.resolve();
+        });
+    }
+    // 其它过渡状态（have-remote-offer / have-local-pranswer 等）：排队，等回 stable 再应答
     if (pc.signalingState !== 'stable') {
       pendingOffers[from] = data;
       return Promise.resolve();
